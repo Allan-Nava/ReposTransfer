@@ -10,14 +10,14 @@ namespace ReposTransfer
         CMDs _cmd = new CMDs();
         public void Status(string Cmd, string Source)
         {
-            if(Cmd == _cmd.Status())
+            if(Cmd.EndsWith("dir"))
             {
                 // check all ready files/directories 'add all'
                 DirectoryInfo dir = new DirectoryInfo(Source);
 
                 WriteLine("Uploaded Files");
                 WriteLine("    (use 'reset' to unstage)");
-                ForegroundColor = ConsoleColor.DarkGreen;
+                ForegroundColor = ConsoleColor.Green;
 
                 FileInfo[] files = dir.GetFiles();
                 DirectoryInfo[] dirs = dir.GetDirectories();
@@ -34,7 +34,7 @@ namespace ReposTransfer
             else
             {
                 // check ready file 'add all'
-                ForegroundColor = ConsoleColor.DarkGreen;
+                ForegroundColor = ConsoleColor.Green;
                 string file = Path.GetFileName(Source);
                 WriteLine("Uploaded File");
                 WriteLine("    (use 'reset' to unstage)");

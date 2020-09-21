@@ -5,7 +5,7 @@ using static System.Console;
 
 namespace ReposTransfer
 {
-    public class CoverStrings
+    public class CoverPwd
     {
         public string ReadPassword()
         {

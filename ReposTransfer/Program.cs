@@ -7,58 +7,158 @@ namespace ReposTransfer
 {
     class Program
     {
-        #region Global Variables
-        static CoverStrings _cover = new CoverStrings();
+        #region Variables
+        static ReposInfo repos = new ReposInfo();
+        static KeysGenerator generator = new KeysGenerator();
+        static CoverPwd _cover = new CoverPwd();
         static BackupManager _backup = new BackupManager();
         static CMDs _cmds = new CMDs();
         static StatusChecker _checker = new StatusChecker();
+        static NetworkCredential netCredential;
+        static NetworkConnection netConn;
+
         static string newL = Environment.NewLine;
-        static string netDir, source, dest, cmd;
+        static string netDir, source, dest, input;
         static string user, pwd;
+        static string version = "1.0.0";
         #endregion
+
         static void Main(string[] args)
         {
-            #region Init Connection
-            NetworkCredential netCredential;
-            NetworkConnection netConn;
-            string currentDir = Directory.GetCurrentDirectory();
-            WriteLine("Welcome to REPOS TRANSFER v0.1" + newL);
+            #region Init Terminal
+            Title = "rtn";
+            WriteLine($"Welcome to REPOS TRANSFER v{version}" + newL);
+            Write("Source Directory: ");
 
-            Write(currentDir + ">"); // Need project path
-            netDir = @"init \\192.168.1.242\homes\yzhou"; // Server repos path
-
-            if (netDir.StartsWith(_cmds.Init()))
+            string sourceDir = ReadLine();
+            bool reposEx = repos.InfoFileFinder(sourceDir);
+            if (reposEx)
             {
-                string[] initConn = netDir.Split(' ');
-                netDir = initConn[1];
+                var netStr = repos.ReadInfoFile(sourceDir);
+                var netSplit = netStr.Split(';');
+                netDir = netSplit[0].ToString();
+                var user = netSplit[1].ToString();
+                var pwd = netSplit[2].ToString();
 
-                Write(newL + "Username: ");
-                user = ReadLine();
-                Write("Password: ");
-                pwd = _cover.ReadPassword();
-
-                netCredential = new NetworkCredential(user, pwd);
                 try
                 {
+                    netCredential = new NetworkCredential(user, pwd);
                     netConn = new NetworkConnection(netDir, netCredential);
-                    WriteLine(newL + "Connect to " + netDir);
+                    WriteLine("Connected to " + netDir);
                 }
                 catch (Exception ex)
                 {
-                    WriteLine("ERROR: Connection failure.");
-                    WriteLine(ex.StackTrace);
+                    WriteLine(ex.Message.ToString());
                 }
             }
-            #endregion
+            else
+            { 
+                WriteLine("Write " + "init \\\\0.0.0.0\\dir\\subdir".ToUpper() + " for connect to the Server");
+            }
+        #endregion
 
-            Write(newL + Directory.GetCurrentDirectory() + ">");
-            source = ReadLine();
-            if (source.StartsWith(_cmds.AddOne()))
+        InputCMD:
+            Write(newL + sourceDir + ">");
+            input = ReadLine();
+
+            var command = input.Split(' ');
+            
+            if (input.StartsWith(_cmds.Start()))
             {
-                string[] initAdd;
-                if (source.Contains(_cmds.AddAll()))
+                #region Init Connection
+                if (command[1] == _cmds.Init())
                 {
-                    source = Directory.GetCurrentDirectory();
+                    Write(newL + "Username: ");
+                    user = ReadLine();
+                    Write("Password: ");
+                    pwd = _cover.ReadPassword();
+
+                    var token = generator.HashCode(64);
+                    var remote = input.Split(' '); // input: init \\\\192.168.1.242\\swlab aggiungendo la parte rtn, il netPath diventa remote[2]
+
+                    if (command.Length > 2)
+                    {
+                        var netAuth = remote[2] + ";" + user + ";" + pwd + ";" + token;
+                        repos.CreateInfoFile(sourceDir, netAuth);
+                        WriteLine("Initialized remote {0}", remote[2]);
+
+                        netCredential = new NetworkCredential(user, pwd);
+                        try
+                        {
+                            netConn = new NetworkConnection(remote[2], netCredential);
+                            WriteLine(newL + "Connect to " + remote[2]);
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteLine(">>ERROR: Connection failure.");
+                            WriteLine(ex.Message.ToString());
+                        }
+                    }
+                    else
+                    {
+                        WriteLine(">>INFO: Please insert rtn init 'network root'.");
+                        goto InputCMD;
+                    }
+                }
+                #endregion
+
+                #region ADD ONE
+                if (command[1] ==_cmds.AddOne())
+                {
+                    #region Add One to Push
+                    if (command.Length > 2) source = sourceDir + "\\" + command[2];
+                    else WriteLine(">>INFO: Please insert the filename.extension");
+                   
+                    string[] dirName = source.Split('\\');
+                    int i = dirName.Length;
+                    i--;
+
+                    string fileName = Path.GetFileName(source);
+                    dest = Path.Combine(netDir + "\\", dirName[1] + "\\" + fileName);
+
+                CMDone:
+                    ResetColor();
+                    Write(newL + sourceDir + ">");
+                    input = ReadLine();
+                    command = input.Split(' ');
+
+                    try
+                    {
+                        if (command[0] == _cmds.Start())
+                        {
+                            if(command.Length > 1)
+                            {
+                                if (command[1] == _cmds.Push())
+                                {
+                                    _backup.OneFile(source, dest);
+                                }
+                                else if (command[1] == _cmds.Status())
+                                {
+                                    _checker.Status(command[1], source);
+                                    goto CMDone;
+                                }
+                                else
+                                {
+                                    WriteLine(">>INFO: Invalid comand.");
+                                    goto CMDone;
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLine(ex.Message.ToString());
+                    }
+                    #endregion
+
+                }
+                #endregion
+
+                #region ADD ALL
+                if (command[1] == _cmds.AddAll())
+                {
+                    #region Add All to Push
+                    source = sourceDir;
                     string[] dirName = source.Split('\\');
                     int i = dirName.Length;
                     i--;
@@ -66,55 +166,92 @@ namespace ReposTransfer
 
                 CMDall:
                     ResetColor();
-                    Write(newL + Directory.GetCurrentDirectory() + ">");
-                    cmd = ReadLine();
-                    if (cmd.StartsWith(_cmds.Push()))
-                    {
-                        _backup.FullDirectory(source, dest, true);
-                        _backup.FullDirectoryStatus(dest);
-                    }
-                    else if (cmd.StartsWith(_cmds.Status()))
-                    {
-                        _checker.Status(cmd, source);
-                        goto CMDall;
-                    }
-                    else
-                    {
-                        WriteLine("    ERROR: try command 'add all'");
-                        goto CMDall;
-                    }
-                }
-                else
-                {
-                    initAdd = source.Split(' ');
-                    source = initAdd[1];
-                    source = Directory.GetCurrentDirectory() + "\\" + source;
-                    string fileName = Path.GetFileName(source);
-                    dest = Path.Combine(netDir + "\\", fileName);
+                    Write(newL + sourceDir + ">");
+                    input = ReadLine();
+                    command = input.Split(' ');
 
-                CMDone:
-                    ResetColor();
-                    Write(newL + Directory.GetCurrentDirectory() + ">");
-                    cmd = ReadLine();
-                    if (cmd.StartsWith(_cmds.Push()))
+                    try
                     {
-                        _backup.OneFile(source, dest);
+                        if (command[0] == _cmds.Start())
+                        {
+                            if (command.Length > 1)
+                            {
+                                if (command[1] == _cmds.Push())
+                                {
+                                    _backup.FullDirectory(source, dest, true);
+                                    _backup.FullDirectoryStatus(dest);
+                                }
+                                else if (command[1] == _cmds.Status())
+                                {
+                                    _checker.Status(command[1], source);
+                                    goto CMDall;
+                                }
+                                else
+                                {
+                                    WriteLine(">>INFO: Invalid comand.");
+                                    goto CMDall;
+                                }
+                            }
+                        }
+
                     }
-                    else if (cmd.StartsWith(_cmds.Status()))
+                    catch (Exception ex)
                     {
-                        _checker.Status(cmd, source);
-                        goto CMDone;
+                        WriteLine(ex.Message.ToString());
                     }
-                    else
+                    #endregion
+                }
+                #endregion
+
+                #region PULL
+                Write(newL + sourceDir + ">");
+                input = ReadLine();
+                command = input.Split(' ');
+                if (command[1] == _cmds.Pull())
+                {
+                    try
                     {
-                        WriteLine("    ERROR: try command 'add file name.extension'");
-                        goto CMDone;
+                        string localRepos = repos.ReadInfoFile(sourceDir);
+                        var localInfo = localRepos.Split(';');
+                        var localKey = localInfo[3];
+
+                        var subDir = Path.GetFileName(sourceDir);
+                        var remoteDir = localInfo[0] + "\\" + subDir;
+
+                        string remoteRepos = repos.ReadInfoFile(remoteDir);
+                        var remoteInfo = remoteRepos.Split(';');
+                        var remoteKey = remoteInfo[3];
+
+                        if (localKey != remoteKey)
+                        {
+                            WriteLine(">>ERROR: ID Key is corrupted.");
+                        }
+                        else
+                        {
+                            _backup.FullDirectory(remoteDir, sourceDir, true);
+                            _backup.FullDirectoryStatus(sourceDir);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLine(ex.Message.ToString());
                     }
                 }
+                #endregion
+
+                #region HELP
+                if (command[1] == _cmds.Help())
+                {
+                    WriteLine(_cmds.HelpInfo());
+                }
+                #endregion
+            }
+            else
+            {
+                WriteLine(">>INFO: Try start with 'rtn' comand.");
             }
 
-
-            ReadKey();
+            goto InputCMD;
         }
     }
 }
